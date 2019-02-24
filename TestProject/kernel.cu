@@ -7,10 +7,10 @@
 #include <clocale>
 
 
-cudaError_t mulWithCuda(int *c, const int *a, const int *b, unsigned int size);
+cudaError_t mulWithCuda(unsigned int *c, const int *a, const int *b, unsigned int size);
 
 // Точка входа в GPU
-__global__ void mulKernel(int *c, const int *a, const int *b)
+__global__ void mulKernel(unsigned int *c, const int *a, const int *b)
 {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	c[i] = a[i] * b[i];
@@ -22,11 +22,11 @@ __global__ void mulKernel(int *c, const int *a, const int *b)
 int main()
 {
 	setlocale(LC_CTYPE, "rus");
-	
+
 	const int arraySize = 8000;
 	int a[arraySize] = { 0 };
 	int b[arraySize] = { 0 };
-	int c[arraySize] = { 0 };
+	unsigned int c[arraySize] = { 0 };
 
 	for (int i = 0; i < arraySize; i++)
 	{
@@ -43,14 +43,16 @@ int main()
 		return 1;
 	}
 	clock_t device_time = clock();
-	
-	printf("Задача перемножить 2 массива \nразмерность каждого массива: 8000 элементов \n\n");
 
-	printf("Вывод первых и последних 10 результатов перемножения массивов: \n\n");
+	printf("Задача перемножить 2 массива \n\n");
+
+	printf("Вывод первых 10 и последних 5 результатов перемножения массивов размерностью %d элементов: \n\n", arraySize);
 	printf("{1,2,3,4,5,6,7,8,9,10} * {10,20,30,40,50,60,70,80,90,100} = \n{%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}\n\n",
 		c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9]);
-	printf("{7991,7992,7993,7994,7995,7996,7997,7998,7999,8000} * {79910,79920,79930,79940,79950,79960,79970,79980,79990,80000} = \n{%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}\n",
-		c[7990], c[7991], c[7992], c[7993], c[7994], c[7995], c[7996], c[7997], c[7998], c[7999]);
+	printf("{%d,%d,%d,%d,%d} * {%d,%d,%d,%d,%d} = \n{%d,%d,%d,%d,%d}\n",
+		a[arraySize - 5], a[arraySize - 4], a[arraySize - 3], a[arraySize - 2], a[arraySize - 1],
+		b[arraySize - 5], b[arraySize - 4], b[arraySize - 3], b[arraySize - 2], b[arraySize - 1],
+		c[arraySize - 5], c[arraySize - 4], c[arraySize - 3], c[arraySize - 2], c[arraySize - 1]);
 
 	printf("\n*******************************************\n\n");
 
@@ -64,8 +66,8 @@ int main()
 	clock_t host_time = clock();
 
 	printf("Время работы метода на устройстве составило: %d мкс \n", device_time * 1000);
-	printf("Время работы метода на хосте составило: %d мкс \n", host_time*1000);
-	printf("Выигрыш работы на устройстве составил: %d мкс \n", (host_time-device_time)*1000);
+	printf("Время работы метода на хосте составило: %d мкс \n", host_time * 1000);
+	printf("Выигрыш работы на устройстве составил: %d мкс \n", (host_time - device_time) * 1000);
 
 	printf("\n*******************************************\n\n");
 
@@ -102,7 +104,7 @@ int main()
 		printf("Количество процессоров: %d\n", deviceProp.multiProcessorCount);
 	}
 	printf("\n*******************************************\n\n");
-	
+
 
 	// cudaDeviceReset must be called before exiting in order for profiling and
 	// tracing tools such as Nsight and Visual Profiler to show complete traces.
@@ -116,11 +118,11 @@ int main()
 }
 
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t mulWithCuda(int *c, const int *a, const int *b, unsigned int size)
+cudaError_t mulWithCuda(unsigned int *c, const int *a, const int *b, unsigned int size)
 {
 	int *dev_a = 0; // dev - находится на GPU
 	int *dev_b = 0;
-	int *dev_c = 0;
+	unsigned int *dev_c = 0;
 	cudaError_t cudaStatus;
 
 	// Choose which GPU to run on, change this on a multi-GPU system.
@@ -131,7 +133,7 @@ cudaError_t mulWithCuda(int *c, const int *a, const int *b, unsigned int size)
 	}
 
 	// Allocate GPU buffers for three vectors (two input, one output)    .
-	cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(int)); // выделяем память на переменную
+	cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(unsigned int)); // выделяем память на переменную
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMalloc failed!");
 		goto Error;
@@ -162,12 +164,12 @@ cudaError_t mulWithCuda(int *c, const int *a, const int *b, unsigned int size)
 		goto Error;
 	}
 
-	
+
 	// Launch a kernel on the GPU with one thread for each element.
-	dim3 block(64, 1);
-	dim3 grid((size / 64), 1);
+	dim3 block(512, 1);
+	dim3 grid((size / 512), 1);
 	mulKernel << <grid, block >> > (dev_c, dev_a, dev_b); // запуск функции с параметрами (size - размер массива)
-	   
+
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -185,7 +187,7 @@ cudaError_t mulWithCuda(int *c, const int *a, const int *b, unsigned int size)
 	}
 
 	// Copy output vector from GPU buffer to host memory.
-	cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(unsigned int), cudaMemcpyDeviceToHost);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMemcpy failed!");
 		goto Error;
