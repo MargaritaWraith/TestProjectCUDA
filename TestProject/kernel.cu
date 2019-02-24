@@ -6,8 +6,6 @@
 #include <ctime>
 #include <clocale>
 
-using namespace std;
-
 
 cudaError_t mulWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
@@ -36,6 +34,8 @@ int main()
 		b[i] = a[i] * 10;
 	}
 
+	srand(time(0));
+
 	// Add vectors in parallel.
 	cudaError_t cudaStatus = mulWithCuda(c, a, b, arraySize);
 	if (cudaStatus != cudaSuccess) {
@@ -43,11 +43,19 @@ int main()
 		return 1;
 	}
 
+	printf("Время работы метода: %d мс \n", clock());
 
+
+	printf("\n*******************************************\n");
+	printf("Вывод первых и последних 10 результатов перемножения массивов размерностью 8000 элементов: \n\n");
 	printf("{1,2,3,4,5,6,7,8,9,10} * {10,20,30,40,50,60,70,80,90,100} = {%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}\n",
 		c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9]);
-	printf("{7001,7002,7003,7004,7005,7006,7007,7008,7009,7010} * {70010,70020,70030,70040,70050,70060,70070,70080,70090,70100} = {%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}\n",
-		c[7000], c[7001], c[7002], c[7003], c[7004], c[7005], c[7006], c[7007], c[7008], c[7009]);
+	printf("{7991,7992,7993,7994,7995,7996,7997,7998,7999,8000} * {79910,79920,79930,79940,79950,79960,79970,79980,79990,80000} = {%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}\n",
+		c[7990], c[7991], c[7992], c[7993], c[7994], c[7995], c[7996], c[7997], c[7998], c[7999]);
+
+	printf("\n*******************************************\n\n");
+
+	printf("Основные данные по устройству: \n\n");
 
 	int deviceCount;
 	cudaGetDeviceCount(&deviceCount);
@@ -79,10 +87,25 @@ int main()
 		printf("Величина текстурного выравнивания : %d\n", deviceProp.textureAlignment);
 		printf("Количество процессоров: %d\n", deviceProp.multiProcessorCount);
 	}
+	printf("\n*******************************************\n\n");
 
+	printf("Расчёт на хосте\n");
+	srand(time(0));
 
+	for (int i = 0; i < arraySize; i++)
+	{
+		c[i] = a[i] * b[i];
+	}
+	printf("Время работы метода на хосте: %d мс \n", clock());
+	printf("Вывод первых и последних 10 результатов перемножения массивов размерностью 8000 элементов: \n\n");
+	printf("{1,2,3,4,5,6,7,8,9,10} * {10,20,30,40,50,60,70,80,90,100} = {%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}\n",
+		c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9]);
+	printf("{7991,7992,7993,7994,7995,7996,7997,7998,7999,8000} * {79910,79920,79930,79940,79950,79960,79970,79980,79990,80000} = {%d,%d,%d,%d,%d,%d,%d,%d,%d,%d}\n",
+		c[7990], c[7991], c[7992], c[7993], c[7994], c[7995], c[7996], c[7997], c[7998], c[7999]);
 
+	printf("\n*******************************************\n\n");
 
+			   
 	// cudaDeviceReset must be called before exiting in order for profiling and
 	// tracing tools such as Nsight and Visual Profiler to show complete traces.
 	cudaStatus = cudaDeviceReset();
@@ -141,16 +164,12 @@ cudaError_t mulWithCuda(int *c, const int *a, const int *b, unsigned int size)
 		goto Error;
 	}
 
-	srand(time(0));
-
+	
 	// Launch a kernel on the GPU with one thread for each element.
-	dim3 block(512, 1);
-	dim3 grid(size / 512, 1);
-	mulKernel << <grid, block >> > (dev_c, dev_a, dev_b); // запуск функции с параметрами: 1 блок, задействовано 5 потоков (size=5 - размер массива)
-
-
-	printf("Время работы метода: %d мс \n", clock());
-
+	dim3 block(64, 1);
+	dim3 grid((size / 64), 1);
+	mulKernel << <grid, block >> > (dev_c, dev_a, dev_b); // запуск функции с параметрами (size - размер массива)
+	   
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
